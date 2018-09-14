@@ -24,11 +24,9 @@ ui <- fluidPage(
     sidebarPanel(
       # Creating a checkbox group input for the 'request origin' variable
       checkboxGroupInput("source_select",
-                  "Source Type:",
-                  choices = levels(pitt$REQUEST_ORIGIN),
-                  multiple = TRUE,
-                  selectize = TRUE,
-                  selected = c("Call Center", "Website", "Control Panel")),
+                         "Source Type:",
+                         choices = levels(pitt$REQUEST_ORIGIN),
+                         selected = c("Call Center", "Website", "Control Panel")),
       # Creating a slider input for the 'year' variable
       sliderInput("year_select",
                   "Year:",
@@ -37,19 +35,31 @@ ui <- fluidPage(
                   value = c(min(pitt$YEAR), max(pitt$YEAR)),
                   step = 1),
       # Creating a drop down select for the 'neighborhood' variable
-      selectInput("neighborhood_select",
-                         "Neighborhood:",
-                         choices = levels(pitt$NEIGHBORHOOD),
-                         multiple = TRUE,
-                         selectize = TRUE,
-                         selected = c("Brookline", "Carrick")),
+      selectInput("nbhd_select",
+                  "Neighborhood:",
+                  choices = levels(pitt$NEIGHBORHOOD),
+                  multiple = TRUE,
+                  selectize = TRUE,
+                  selected = c("Brookline", "Carrick", "South Side Slopes", "Bloomfield", "Squirrel Hill South",
+                               "South Side Flats", "Central Lawrenceville", "Knoxville", "Shadyside", 
+                               "Lincoln-Lemington-Belmar", "Stanton Heights", "Overbrook", "Squirrel Hill North",
+                               "Beechview", "Highland Park")),
+      # Creating a drop down select for the 'request type' variable
+      selectInput("type_select",
+                  "Request Type:",
+                  choices = levels(pitt$REQUEST_TYPE),
+                  multiple = TRUE,
+                  selectize = TRUE,
+                  selected = c("Potholes", "Weeds/Debris", "Snow/Ice removal", "Refuse Violations",
+                               "Building Maintenance", "Missed Pick Up", "Abandoned Vehicle (parked on street)",
+                               "Replace/Repair a Sign", "Litter", "Overgrowth", "Street Light - Repair")),
       # Create Reset button
       actionButton("reset", "Reset Filters", icon = icon("refresh"))
     ),
     mainPanel(
       tabsetPanel(
-        tabPanel("Plot", 
-                 plotlyOutput("plot")
+        tabPanel("Plots", 
+                 plotlyOutput("year_plot"), plotlyOutput("nbhd_plot"), plotlyOutput("source_plot")
         ),
         tabPanel("Table",
                  inputPanel(
@@ -63,67 +73,78 @@ ui <- fluidPage(
 )
 
 # Defining server logic
-# server <- function(input, output, session) {
-#   # Filtered Starwars data
-#   pittInput <- reactive({
-#     pitt <- pitt %>%
-#       # Slider Filter
-#       filter(birth_year >= input$birthSelect[1] & birth_year <= input$birthSelect[2])
-#     # Homeworld Filter
-#     if (length(input$worldSelect) > 0 ) {
-#       starwars <- subset(starwars, homeworld %in% input$worldSelect)
-#     }
-#     
-#     return(starwars)
-#   })
-#   # Reactive melted data
-#   mwInput <- reactive({
-#     swInput() %>%
-#       melt(id = "name")
-#   })
-#   # Point plot showing Mass, Height and Species
-#   output$plot <- renderPlotly({
-#     dat <- swInput()
-#     ggplotly(
-#       ggplot(data = dat, aes(x = mass, y = height, color = species, text = paste0("<b>", name, ":</b> ",
-#                                                                                   "<br>Homeworld: ", homeworld,
-#                                                                                   "<br>Mass: ", mass,
-#                                                                                   "<br>Height: ", height))) + 
-#         geom_point() +
-#         guides(color = FALSE)
-#       , tooltip = "text")
-#   })
-#   # Data Table
-#   output$table <- DT::renderDataTable({
-#     starwars <- swInput()
-#     
-#     subset(starwars, select = c(name, height, mass, birth_year, homeworld, species, films))
-#   })
-#   # Updating the URL Bar
-#   observe({
-#     print(reactiveValuesToList(input))
-#     session$doBookmark()
-#   })
-#   onBookmarked(function(url) {
-#     updateQueryString(url)
-#   })
-#   # Download data in the datatable
-#   output$downloadData <- downloadHandler(
-#     filename = function() {
-#       paste("star-wars-", Sys.Date(), ".csv", sep="")
-#     },
-#     content = function(file) {
-#       write.csv(swInput(), file)
-#     }
-#   )
-#   # Reset Filter Data
-#   observeEvent(input$reset, {
-#     updateSelectInput(session, "worldSelect", selected = c("Naboo", "Tatooine"))
-#     updateSliderInput(session, "birthSelect", value = c(min(starwars.load$birth_year, na.rm = T), max(starwars.load$birth_year, na.rm = T)))
-#     showNotification("You have successfully reset the filters", type = "message")
-#     #alert("You have reset the application!!! <3")
-#   })
-# }
-# 
-# # Run the application 
-# shinyApp(ui = ui, server = server, enableBookmarking = "url")
+server <- function(input, output, session) {
+  # Creating filtered 
+  pittFiltered <- reactive({
+    filt <- pitt %>%
+      filter(YEAR >= input$year_select[1] & YEAR <= input$year_select[2] & 
+               REQUEST_TYPE == input$type_select)
+    if (length(input$source_select) > 0) {
+      filt <- subset(filt, REQUEST_ORIGIN %in% input$source_select)
+    }
+    if (length(input$nbhd_select) > 0) {
+      filt <- subset(filt, NEIGHBORHOOD %in% input$nbhd_select)
+    }
+    return(filt) 
+  })
+
+   # Histogram showing Request Types by Year
+  output$year_plot <- renderPlotly({
+    dat <- pittFiltered() %>% group_by(REQUEST_TYPE, YEAR) %>% summarise(COUNT = n())
+    ggplotly(
+      ggplot(data = dat, aes(x = YEAR, y = COUNT, color = REQUEST_TYPE)) + 
+        geom_line(stat = "identity"))
+    })
+  
+  output$source_plot <- renderPlotly({
+    dat <- pittFiltered() %>% group_by(REQUEST_TYPE, REQUEST_ORIGIN) %>% summarise(COUNT = n())
+    ggplotly(
+      ggplot(data = dat, aes(x = REQUEST_ORIGIN, y = COUNT, fill = REQUEST_TYPE)) +
+        geom_bar(stat = "identity")
+      )
+    })
+   
+   output$nbhd_plot <- renderPlotly({
+     dat <- pittFiltered() %>% group_by(NEIGHBORHOOD, REQUEST_TYPE) %>% summarise(COUNT = n())
+     ggplotly(
+       ggplot(data = dat, aes(x = NEIGHBORHOOD, y = COUNT, fill = REQUEST_TYPE,
+                              text = paste0("<b>", "<br>Neighborhood: ", NEIGHBORHOOD,
+                                            "<br>Request Type: ", REQUEST_TYPE, 
+                                            "<br>Count: ", COUNT))) +
+         geom_point() + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
+         guides(color = FALSE)
+       , tooltip = "text")
+     })
+     
+   # Data Table
+   output$table <- DT::renderDataTable({
+     pitt <- pittFiltered()
+     subset(pitt, select = c(REQUEST_TYPE, REQUEST_ORIGIN, STATUS, DEPARTMENT, NEIGHBORHOOD))
+   })
+   # Updating the URL Bar
+   observe({
+     print(reactiveValuesToList(input))
+     session$doBookmark()
+   })
+   onBookmarked(function(url) {
+     updateQueryString(url)
+   })
+   # Download data in the datatable
+   output$downloadData <- downloadHandler(
+     filename = function() {
+       paste("pitt-311-", Sys.Date(), ".csv", sep="")
+     },
+     content = function(file) {
+       write.csv(pittFiltered(), file)
+     }
+)
+    # Reset Filter Data
+   observeEvent(input$reset, {
+     updateSelectInput(session, "worldSelect", selected = c("Naboo", "Tatooine"))
+     updateSliderInput(session, "birthSelect", value = c(min(starwars.load$birth_year, na.rm = T), max(starwars.load$birth_year, na.rm = T)))
+     alert("You have reset the application!!! <3")
+})
+}
+
+ # Run the application
+ shinyApp(ui = ui, server = server, enableBookmarking = "url")
