@@ -7,8 +7,8 @@ library(plotly)
 library(shinythemes)
 library(stringr)
 library(shinyjs)
-
-setwd("C:/Users/nikit/Documents/git/hw2-nikitas")
+# This won't work on someone else's computer, especially mine since its a macbook. Apps will autmatically take the directory they're in as the working directory
+# setwd("C:/Users/nikit/Documents/git/hw2-nikitas")
 
 pitt <- read.csv("pitt_clean.csv", header = TRUE, sep = ',')
 
@@ -30,11 +30,13 @@ ui <- fluidPage(
                          choices = levels(pitt$REQUEST_ORIGIN),
                          selected = c("Call Center", "Website", "Control Panel")),
       # Creating a slider input for the 'year' variable
+      # There is a sep command I would use in the future for years so that there aren't commas Or use the dateRangeInput() selection instead
       sliderInput("year_select",
                   "Year:",
                   min = min(pitt$YEAR),
                   max = max(pitt$YEAR),
                   value = c(min(pitt$YEAR), max(pitt$YEAR)),
+                  sep = "", # Like this
                   step = 1),
       # Creating a select input for the 'neighborhood' variable
       selectInput("nbhd_select",
@@ -163,6 +165,7 @@ server <- function(input, output, session) {
 )
     # Reseting Filter Data
    observeEvent(input$reset, {
+    # These selected lists are a little messy
      updateSelectInput(session, "nbhd_select", selected = c("Brookline", "Carrick", "South Side Slopes", "Bloomfield", "Squirrel Hill South",
                                                               "South Side Flats", "Central Lawrenceville", "Knoxville", "Shadyside", 
                                                               "Lincoln-Lemington-Belmar", "Stanton Heights", "Overbrook", "Squirrel Hill North",
