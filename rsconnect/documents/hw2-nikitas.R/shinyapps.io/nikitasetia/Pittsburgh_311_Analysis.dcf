@@ -1,0 +1,12 @@
+name: Pittsburgh_311_Analysis
+title: Pittsburgh_311_Analysis
+username:
+account: nikitasetia
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 454304
+bundleId: 1592546
+url: https://nikitasetia.shinyapps.io/Pittsburgh_311_Analysis/
+when: 1537306287.2832
+asMultiple: FALSE
+asStatic: FALSE
