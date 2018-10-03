@@ -28,9 +28,11 @@ ckanUniques <- function(id, field) {
   c(ckanSQL(URLencode(url)))
 }
 
-types <- sort(ckanUniques("76fda9d0-69be-4dd5-8108-0de7907fc5a4", "REQUEST_TYPE")$REQUEST_TYPE)
+request_types <- sort(ckanUniques("76fda9d0-69be-4dd5-8108-0de7907fc5a4", "REQUEST_TYPE")$REQUEST_TYPE)
+neighborhoods <- sort(ckanUniques("76fda9d0-69be-4dd5-8108-0de7907fc5a4", "NEIGHBORHOOD")$NEIGHBORHOOD)
+sources <- sort(ckanUniques("76fda9d0-69be-4dd5-8108-0de7907fc5a4", "REQUEST_ORIGIN")$REQUEST_ORIGIN)
 
-pdf(NULL)
+#pdf(NULL)
 
 # Define UI for application
 ui <- fluidPage(
@@ -42,28 +44,28 @@ ui <- fluidPage(
   # Sidebar
   sidebarLayout(
     sidebarPanel(
-      # Creating a checkbox group input for the 'request origin' or source variable
+      # Creating a checkbox input for the 'request origin'
       checkboxGroupInput("source_select",
                          "Source Type:",
-                         choices = levels(pitt$REQUEST_ORIGIN),
-                         selected = c("Call Center", "Website", "Control Panel")),
+                         choices = sources,
+                         selected = "Call Center"),
       # Creating a date range input for the date variable
-      dateRangeInput("dates",
+      dateRangeInput("date_select",
                      "Select Dates",
-                     start = min(),
-                     end = max()),
+                     start = Sys.Date()-30,
+                     end = Sys.Date()),
       # Creating a select input for the 'neighborhood' variable
       selectInput("nbhd_select",
                   "Neighborhood:",
-                  choices = levels(pitt$NEIGHBORHOOD),
+                  choices = neighborhoods,
                   selectize = TRUE,
-                  selected = c()),
+                  selected = "Highland Park"),
       # Creating a select input for the 'request type' variable
       selectInput("type_select",
                   "Request Type:",
-                  choices = levels(pitt$REQUEST_TYPE),
+                  choices = request_types,
                   selectize = TRUE,
-                  selected = c()),
+                  selected = "Potholes"),
       # Creating a Reset button
       actionButton("reset", "Reset Filters", icon = icon("refresh"))
     ),
@@ -97,52 +99,50 @@ server <- function(input, output, session) {
   # Creating filtered pitt 311 data
   pittFiltered <- reactive({
     # Build API Query with proper encodes
-    url <- paste0("https://data.wprdc.org/api/action/datastore_search_sql?sql=SELECT%20*%20FROM%20%2276fda9d0-69be-4dd5-8108-0de7907fc5a4%22%20WHERE%20%22CREATED_ON%22%20%3E=%20%27", input$dates[1], "%27%20AND%20%22CREATED_ON%22%20%3C=%20%27", input$dates[2], "%27%20AND%20%22REQUEST_TYPE%22%20=%20%27", input$type_select, "%27")
-     
+    # Added filters for request date, type, source, and neighborhood
+    url <- paste0("https://data.wprdc.org/api/action/datastore_search_sql?sql=SELECT%20*%20FROM%20%2276fda9d0-69be-4dd5-8108-0de7907fc5a4%22")
+#%20WHERE%20%22CREATED_ON%22%20%3E=%20%27", input$date_select[1], "%27%20AND%20%22CREATED_ON%22%20%3C=%20%27", input$date_select[2], "%27%20AND%20%22REQUEST_TYPE%22%20=%20%27", input$type_select, "%27%20AND%20%22REQUEST_ORIGIN%22%20=%20%27", input$source_select, "%27%20AND%20%22NEIGHBORHOOD%22%20=%20%27", input$nbhd_select, "%27")
     # Load and clean data
-    dat311 <- ckanSQL(url) %>%
-      mutate(date = as.Date(CREATED_ON),
-             STATUS = ifelse(STATUS == 1, "Closed", "Open"))
+    data <- ckanSQL(url) 
+    #%>%
+      #mutate(DATE = as.Date(CREATED_ON),
+       #      STATUS = ifelse(STATUS == 1, "Closed", "Open")) 
+    # find row #s where geographic location is out of bounds
+    #index <- which(data$GEO_ACCURACY == "OUT_OF_BOUNDS")
+    # replace neighborhood values where the location is out of bounds
+    #data$NEIGHBORHOOD[index] <- c("Out of Bounds")
+    # removing data where neighborhood is missing
+    #filt311 <- data[-which(data$NEIGHBORHOOD == ''),]
     
-    # creating filters for year_select, type_select, source_select and nbhd_select inputs
-      filter(YEAR >= input$year_select[1] & YEAR <= input$year_select[2] & 
-               REQUEST_TYPE == input$type_select)
-    if (length(input$source_select) > 0) {
-      filt <- subset(filt, REQUEST_ORIGIN %in% input$source_select)
-    }
-    if (length(input$nbhd_select) > 0) {
-      filt <- subset(filt, NEIGHBORHOOD %in% input$nbhd_select)
-    }
-    return(filt) 
+    return(data) 
   })
 
-   # Line graph showing count of Request Types by Year
+   # Line graph showing count of requests by types over time
   output$year_plot <- renderPlotly({
-    dat <- pittFiltered() %>% group_by(REQUEST_TYPE, YEAR) %>% summarise(COUNT = n())
+    dat <- pittFiltered() %>% group_by(REQUEST_TYPE, DATE) %>% summarise(COUNT = n())
     ggplotly(
-      ggplot(data = dat, aes(x = YEAR, y = COUNT, color = REQUEST_TYPE)) + 
-        xlab("Year") + ylab("Count") +
+      ggplot(data = dat, aes(x = DATE, y = COUNT, color = REQUEST_TYPE)) + 
+        xlab("Date") + ylab("Count") +
         labs(color = "Request Type") + 
-        ggtitle("Request Types by Year") +
+        ggtitle("Requests by Type Over Time") +
         geom_line(stat = "identity"))
     })
-  # Bar graph showing count of Request Types by Request Source/Origin
+  # Bar graph showing count of requests by source/origin over time
   output$source_plot <- renderPlotly({
-    dat <- pittFiltered() %>% group_by(REQUEST_TYPE, REQUEST_ORIGIN) %>% summarise(COUNT = n())
+    dat <- pittFiltered() %>% group_by(REQUEST_ORIGIN, DATE) %>% summarise(COUNT = n())
     ggplotly(
-      ggplot(data = dat, aes(x = REQUEST_ORIGIN, y = COUNT, fill = REQUEST_TYPE)) +
-        xlab("Source") + ylab("Count") +
-        labs(fill = "Request Type") + 
-        ggtitle("Request Types by Source") +
+      ggplot(data = dat, aes(x = DATE, y = COUNT, fill = REQUEST_ORIGIN)) +
+        xlab("Date") + ylab("Count") +
+        labs(fill = "Request Origin") + 
+        ggtitle("Requests by Source Over Time") +
         geom_bar(stat = "identity")
       )
     })
-  
-   # Point chart showing count of Request Types by Neighborhood
+   # Point chart showing count of requests by neighborhood over time
    output$nbhd_plot <- renderPlotly({
-     dat <- pittFiltered() %>% group_by(NEIGHBORHOOD, REQUEST_TYPE) %>% summarise(COUNT = n())
+     dat <- pittFiltered() %>% group_by(NEIGHBORHOOD, DATE) %>% summarise(COUNT = n())
      ggplotly(
-       ggplot(data = dat, aes(x = NEIGHBORHOOD, y = COUNT, fill = REQUEST_TYPE,
+       ggplot(data = dat, aes(x = DATE, y = COUNT, fill = NEIGHBORHOOD,
                               text = paste0("<b>", "<br>Neighborhood: ", NEIGHBORHOOD,
                                             "<br>Request Type: ", REQUEST_TYPE, 
                                             "<br>Count: ", COUNT))) +
@@ -180,15 +180,9 @@ server <- function(input, output, session) {
     # Reseting Filter Data
    observeEvent(input$reset, {
     # These selected lists are a little messy
-     updateSelectInput(session, "nbhd_select", selected = c("Brookline", "Carrick", "South Side Slopes", "Bloomfield", "Squirrel Hill South",
-                                                              "South Side Flats", "Central Lawrenceville", "Knoxville", "Shadyside", 
-                                                              "Lincoln-Lemington-Belmar", "Stanton Heights", "Overbrook", "Squirrel Hill North",
-                                                              "Beechview", "Highland Park"))
-     updateSliderInput(session, "year_select", value = c(min(pitt$YEAR), max(pitt$YEAR)))
-     updateSelectInput(session, "type_select",  selected = c("Potholes", "Weeds/Debris", "Snow/Ice removal", "Refuse Violations",
-                                                               "Building Maintenance", "Missed Pick Up", "Abandoned Vehicle (parked on street)",
-                                                               "Replace/Repair a Sign", "Litter", "Overgrowth", "Street Light - Repair"))
-     updateCheckboxGroupInput(session, "source_select", selected = c("Call Center", "Website", "Control Panel"))
+     updateSelectInput(session, "nbhd_select", selected = "Highland Park")
+     updateSelectInput(session, "type_select",  selected = "Potholes")
+     updateCheckboxGroupInput(session, "source_select", selected = "Call Center")
      alert("You have reset the application!")
 })
 }
