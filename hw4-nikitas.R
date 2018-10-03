@@ -10,6 +10,7 @@ library(shinyjs)
 library(httr)
 library(jsonlite)
 
+# Function to load data from API
 ckanSQL <- function(url) {
   # Make the Request
   r <- RETRY("GET", URLencode(url))
@@ -31,7 +32,7 @@ types <- sort(ckanUniques("76fda9d0-69be-4dd5-8108-0de7907fc5a4", "REQUEST_TYPE"
 
 pdf(NULL)
 
-# Define UI for application that draws a histogram
+# Define UI for application
 ui <- fluidPage(
   # Add Shinyjs
   useShinyjs(),
@@ -46,31 +47,23 @@ ui <- fluidPage(
                          "Source Type:",
                          choices = levels(pitt$REQUEST_ORIGIN),
                          selected = c("Call Center", "Website", "Control Panel")),
-      # Creating a slider input for the 'year' variable
-      # There is a sep command I would use in the future for years so that there aren't commas Or use the dateRangeInput() selection instead
-      sliderInput(dateRangeInput("dates",
-                                 "Select Dates",
-                                 start = min(),
-                                 end = max()),
+      # Creating a date range input for the date variable
+      dateRangeInput("dates",
+                     "Select Dates",
+                     start = min(),
+                     end = max()),
       # Creating a select input for the 'neighborhood' variable
       selectInput("nbhd_select",
                   "Neighborhood:",
                   choices = levels(pitt$NEIGHBORHOOD),
-                  multiple = TRUE,
                   selectize = TRUE,
-                  selected = c("Brookline", "Carrick", "South Side Slopes", "Bloomfield", "Squirrel Hill South",
-                               "South Side Flats", "Central Lawrenceville", "Knoxville", "Shadyside", 
-                               "Lincoln-Lemington-Belmar", "Stanton Heights", "Overbrook", "Squirrel Hill North",
-                               "Beechview", "Highland Park")),
+                  selected = c()),
       # Creating a select input for the 'request type' variable
       selectInput("type_select",
                   "Request Type:",
                   choices = levels(pitt$REQUEST_TYPE),
-                  multiple = TRUE,
                   selectize = TRUE,
-                  selected = c("Potholes", "Weeds/Debris", "Snow/Ice removal", "Refuse Violations",
-                               "Building Maintenance", "Missed Pick Up", "Abandoned Vehicle (parked on street)",
-                               "Replace/Repair a Sign", "Litter", "Overgrowth", "Street Light - Repair")),
+                  selected = c()),
       # Creating a Reset button
       actionButton("reset", "Reset Filters", icon = icon("refresh"))
     ),
