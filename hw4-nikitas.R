@@ -28,7 +28,6 @@ ckanUniques <- function(id, field) {
   c(ckanSQL(URLencode(url)))
 }
 
-request_types <- sort(ckanUniques("76fda9d0-69be-4dd5-8108-0de7907fc5a4", "REQUEST_TYPE")$REQUEST_TYPE)
 neighborhoods <- sort(ckanUniques("76fda9d0-69be-4dd5-8108-0de7907fc5a4", "NEIGHBORHOOD")$NEIGHBORHOOD)
 sources <- sort(ckanUniques("76fda9d0-69be-4dd5-8108-0de7907fc5a4", "REQUEST_ORIGIN")$REQUEST_ORIGIN)
 
@@ -45,10 +44,10 @@ ui <- fluidPage(
   sidebarLayout(
     sidebarPanel(
       # Creating a checkbox input for the 'request origin'
-      checkboxGroupInput("source_select",
-                         "Source Type:",
-                         choices = sources,
-                         selected = "Call Center"),
+      selectInput("source_select",
+                  "Source Type:",
+                  choices = sources,
+                  selected = "Call Center"),
       # Creating a date range input for the date variable
       dateRangeInput("date_select",
                      "Select Dates",
@@ -59,13 +58,7 @@ ui <- fluidPage(
                   "Neighborhood:",
                   choices = neighborhoods,
                   selectize = TRUE,
-                  selected = "Highland Park"),
-      # Creating a select input for the 'request type' variable
-      selectInput("type_select",
-                  "Request Type:",
-                  choices = request_types,
-                  selectize = TRUE,
-                  selected = "Potholes"),
+                  selected = "Brookline"),
       # Creating a Reset button
       actionButton("reset", "Reset Filters", icon = icon("refresh"))
     ),
@@ -73,15 +66,15 @@ ui <- fluidPage(
     mainPanel(
       tabsetPanel(
         tabPanel("Plots", 
-                 plotlyOutput("year_plot"), 
+                 plotlyOutput("count_plot"), 
                  # adding space between plots
                  br(),
                  br(),
-                 plotlyOutput("nbhd_plot"), 
+                 plotlyOutput("type_plot"), 
                  # adding space between plots
                  br(),
                  br(),
-                 plotlyOutput("source_plot")
+                 plotlyOutput("status_plot")
         ),
         tabPanel("Table",
                  inputPanel(
@@ -100,59 +93,49 @@ server <- function(input, output, session) {
   pittFiltered <- reactive({
     # Build API Query with proper encodes
     # Added filters for request date, type, source, and neighborhood
-    url <- paste0("https://data.wprdc.org/api/action/datastore_search_sql?sql=SELECT%20*%20FROM%20%2276fda9d0-69be-4dd5-8108-0de7907fc5a4%22")
-#%20WHERE%20%22CREATED_ON%22%20%3E=%20%27", input$date_select[1], "%27%20AND%20%22CREATED_ON%22%20%3C=%20%27", input$date_select[2], "%27%20AND%20%22REQUEST_TYPE%22%20=%20%27", input$type_select, "%27%20AND%20%22REQUEST_ORIGIN%22%20=%20%27", input$source_select, "%27%20AND%20%22NEIGHBORHOOD%22%20=%20%27", input$nbhd_select, "%27")
+    url <- paste0("https://data.wprdc.org/api/action/datastore_search_sql?sql=SELECT%20*%20FROM%20%2276fda9d0-69be-4dd5-8108-0de7907fc5a4%22%20WHERE%20%22CREATED_ON%22%20%3E=%20%27", 
+                  input$date_select[1], "%27%20AND%20%22CREATED_ON%22%20%3C=%20%27", input$date_select[2], 
+                  "%27%20AND%20%22NEIGHBORHOOD%22%20=%20%27", input$nbhd_select, 
+                  "%27%20AND%20%22REQUEST_ORIGIN%22%20=%20%27", input$source_select, "%27")
+    url <- gsub(pattern = " ", replacement = "%20", x = url)  
     # Load and clean data
-    data <- ckanSQL(url) 
-    #%>%
-      #mutate(DATE = as.Date(CREATED_ON),
-       #      STATUS = ifelse(STATUS == 1, "Closed", "Open")) 
-    # find row #s where geographic location is out of bounds
-    #index <- which(data$GEO_ACCURACY == "OUT_OF_BOUNDS")
-    # replace neighborhood values where the location is out of bounds
-    #data$NEIGHBORHOOD[index] <- c("Out of Bounds")
-    # removing data where neighborhood is missing
-    #filt311 <- data[-which(data$NEIGHBORHOOD == ''),]
+    data <- ckanSQL(url) %>%
+      mutate(DATE = as.Date(CREATED_ON),
+      STATUS = ifelse(STATUS == 1, "Closed", "Open"))
     
     return(data) 
   })
 
    # Line graph showing count of requests by types over time
-  output$year_plot <- renderPlotly({
-    dat <- pittFiltered() %>% group_by(REQUEST_TYPE, DATE) %>% summarise(COUNT = n())
+  output$count_plot <- renderPlotly({
+    dat <- pittFiltered() %>% group_by(DATE) %>% summarise(COUNT = n())
     ggplotly(
-      ggplot(data = dat, aes(x = DATE, y = COUNT, color = REQUEST_TYPE)) + 
+      ggplot(data = dat, aes(x = DATE, y = COUNT)) + 
         xlab("Date") + ylab("Count") +
-        labs(color = "Request Type") + 
         ggtitle("Requests by Type Over Time") +
-        geom_line(stat = "identity"))
+        geom_point() + 
+        geom_smooth()
+      )
     })
   # Bar graph showing count of requests by source/origin over time
-  output$source_plot <- renderPlotly({
-    dat <- pittFiltered() %>% group_by(REQUEST_ORIGIN, DATE) %>% summarise(COUNT = n())
+  output$type_plot <- renderPlotly({
+    dat <- pittFiltered() %>% group_by(REQUEST_TYPE, DATE) %>% summarise(COUNT = n())
     ggplotly(
-      ggplot(data = dat, aes(x = DATE, y = COUNT, fill = REQUEST_ORIGIN)) +
-        xlab("Date") + ylab("Count") +
-        labs(fill = "Request Origin") + 
-        ggtitle("Requests by Source Over Time") +
-        geom_bar(stat = "identity")
+      ggplot(data = dat, aes(x = DATE, y = COUNT, color = REQUEST_TYPE)) +
+        xlab("Date") + ylab("Count") + 
+        ggtitle("Requests by Type Over Time") +
+        geom_line(stat = "identity")
       )
     })
    # Point chart showing count of requests by neighborhood over time
-   output$nbhd_plot <- renderPlotly({
-     dat <- pittFiltered() %>% group_by(NEIGHBORHOOD, DATE) %>% summarise(COUNT = n())
+   output$status_plot <- renderPlotly({
+     dat <- pittFiltered() %>% group_by(STATUS) %>% summarise(COUNT = n())
      ggplotly(
-       ggplot(data = dat, aes(x = DATE, y = COUNT, fill = NEIGHBORHOOD,
-                              text = paste0("<b>", "<br>Neighborhood: ", NEIGHBORHOOD,
-                                            "<br>Request Type: ", REQUEST_TYPE, 
-                                            "<br>Count: ", COUNT))) +
-         geom_point() + 
-         xlab("Neighborhood") + ylab("Count") +
-         labs(fill = "Request Type") + 
-         ggtitle("Request Types by Neighborhood") +
-         theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
-         guides(color = FALSE)
-       , tooltip = "text")
+       ggplot(data = dat, aes(x = STATUS, y = COUNT, fill = STATUS)) +
+         geom_bar(stat = "identity") + 
+         xlab("Status") + ylab("Count") +
+         ggtitle("Status of Requests")
+       )
      })
      
    # Data Table with 311 data filters
@@ -179,10 +162,9 @@ server <- function(input, output, session) {
 )
     # Reseting Filter Data
    observeEvent(input$reset, {
-    # These selected lists are a little messy
-     updateSelectInput(session, "nbhd_select", selected = "Highland Park")
-     updateSelectInput(session, "type_select",  selected = "Potholes")
-     updateCheckboxGroupInput(session, "source_select", selected = "Call Center")
+     updateSelectInput(session, "nbhd_select", selected = "Brookline")
+     updateSelectInput(session, "source_select",  selected = "Call Center")
+     updateDateRangeInput(session, "date_select", start = Sys.Date()-30, end = Sys.Date())
      alert("You have reset the application!")
 })
 }
