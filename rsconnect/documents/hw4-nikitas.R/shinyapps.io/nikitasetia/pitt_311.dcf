@@ -1,0 +1,12 @@
+name: pitt_311
+title: pitt_311
+username:
+account: nikitasetia
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 491690
+bundleId: 1623518
+url: https://nikitasetia.shinyapps.io/pitt_311/
+when: 1538685073.15885
+asMultiple: FALSE
+asStatic: FALSE
