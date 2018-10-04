@@ -1,4 +1,4 @@
-#Homework 4 - Nikita Setia
+#Homework 4 (revised homework 2) - Nikita Setia
 
 library(shiny)
 library(reshape2)
@@ -46,6 +46,7 @@ ui <- fluidPage(
       # Creating a checkbox input for the 'request origin'
       selectInput("source_select",
                   "Source Type:",
+                  multiple = TRUE,
                   choices = sources,
                   selected = "Call Center"),
       # Creating a date range input for the date variable
@@ -92,32 +93,57 @@ server <- function(input, output, session) {
   # Creating filtered pitt 311 data
   pittFiltered <- reactive({
     # Build API Query with proper encodes
-    # Added filters for request date, type, source, and neighborhood
-    url <- paste0("https://data.wprdc.org/api/action/datastore_search_sql?sql=SELECT%20*%20FROM%20%2276fda9d0-69be-4dd5-8108-0de7907fc5a4%22%20WHERE%20%22CREATED_ON%22%20%3E=%20%27", 
-                  input$date_select[1], "%27%20AND%20%22CREATED_ON%22%20%3C=%20%27", input$date_select[2], 
-                  "%27%20AND%20%22NEIGHBORHOOD%22%20=%20%27", input$nbhd_select, 
-                  "%27%20AND%20%22REQUEST_ORIGIN%22%20=%20%27", input$source_select, "%27")
-    url <- gsub(pattern = " ", replacement = "%20", x = url)  
-    # Load and clean data
-    data <- ckanSQL(url) %>%
-      mutate(DATE = as.Date(CREATED_ON),
-      STATUS = ifelse(STATUS == 1, "Closed", "Open"))
+    # If no source_select input selected
+    if (length(input$source_select) == 0 ) {
+      url <- paste0("https://data.wprdc.org/api/action/datastore_search_sql?sql=SELECT%20*%20FROM%20%2276fda9d0-69be-4dd5-8108-0de7907fc5a4%22%20WHERE%20%22CREATED_ON%22%20%3E=%20%27", 
+                    input$date_select[1], "%27%20AND%20%22CREATED_ON%22%20%3C=%20%27", input$date_select[2], 
+                    "%27%20AND%20%22NEIGHBORHOOD%22%20=%20%27", input$nbhd_select, "%27")
+      url <- gsub(pattern = " ", replacement = "%20", x = url)
+      
+    # If one source_select input selected  
+    } else if (length(input$source_select) == 1) {
+      url <- paste0("https://data.wprdc.org/api/action/datastore_search_sql?sql=SELECT%20*%20FROM%20%2276fda9d0-69be-4dd5-8108-0de7907fc5a4%22%20WHERE%20%22CREATED_ON%22%20%3E=%20%27", 
+                    input$date_select[1], "%27%20AND%20%22CREATED_ON%22%20%3C=%20%27", input$date_select[2], 
+                    "%27%20AND%20%22NEIGHBORHOOD%22%20=%20%27", input$nbhd_select, 
+                    "%27%20AND%20%22REQUEST_ORIGIN%22%20=%20%27", input$source_select, "%27")
+      url <- gsub(pattern = " ", replacement = "%20", x = url)
+      
+      # Multiple source_select inputs selected
+    } else {
+      primary_desc_q <- paste0(input$source_select, collapse = "%27%20OR%20%22REQUEST_ORIGIN%22%20=%20%27")
+      url <- paste0("https://data.wprdc.org/api/action/datastore_search_sql?sql=SELECT%20*%20FROM%20%2276fda9d0-69be-4dd5-8108-0de7907fc5a4%22%20WHERE%20%22CREATED_ON%22%20%3E=%20%27", 
+                    input$date_select[1], "%27%20AND%20%22CREATED_ON%22%20%3C=%20%27", input$date_select[2], 
+                    "%27%20AND%20%22NEIGHBORHOOD%22%20=%20%27", input$nbhd_select, 
+                    "%27%20AND%20%22REQUEST_ORIGIN%22%20=%20%27", primary_desc_q, "%27")
+      url <- gsub(pattern = " ", replacement = "%20", x = url)}
     
-    return(data) 
+    data <- ckanSQL(url)
+    
+    # Load and clean data
+    if (is.null(data[1,1])){
+      alert("There is no data available for your selected inputs. Please reset filters and select different inputs.")
+    } else {
+      data <- data %>%
+        mutate(DATE = as.Date(CREATED_ON),
+               STATUS = ifelse(STATUS == 1, "Closed", "Open"))
+      
+      return(data) 
+    }
+    
   })
-
-   # Line graph showing count of requests by types over time
+  
+   # Line graph showing count of all requests over time
   output$count_plot <- renderPlotly({
     dat <- pittFiltered() %>% group_by(DATE) %>% summarise(COUNT = n())
     ggplotly(
       ggplot(data = dat, aes(x = DATE, y = COUNT)) + 
         xlab("Date") + ylab("Count") +
-        ggtitle("Requests by Type Over Time") +
+        ggtitle("Request Count Over Time") +
         geom_point() + 
         geom_smooth()
       )
     })
-  # Bar graph showing count of requests by source/origin over time
+  # Bar graph showing count of requests by type over time
   output$type_plot <- renderPlotly({
     dat <- pittFiltered() %>% group_by(REQUEST_TYPE, DATE) %>% summarise(COUNT = n())
     ggplotly(
@@ -127,7 +153,7 @@ server <- function(input, output, session) {
         geom_line(stat = "identity")
       )
     })
-   # Point chart showing count of requests by neighborhood over time
+   # Point chart showing count of requests by status
    output$status_plot <- renderPlotly({
      dat <- pittFiltered() %>% group_by(STATUS) %>% summarise(COUNT = n())
      ggplotly(
@@ -141,7 +167,7 @@ server <- function(input, output, session) {
    # Data Table with 311 data filters
    output$table <- DT::renderDataTable({
      pitt <- pittFiltered()
-     subset(pitt, select = c(REQUEST_TYPE, REQUEST_ORIGIN, STATUS, DEPARTMENT, NEIGHBORHOOD))
+     subset(pitt, select = c(REQUEST_TYPE, DATE, REQUEST_ORIGIN, STATUS, DEPARTMENT, NEIGHBORHOOD))
    })
    # Updating the URL Bar
    observe({
