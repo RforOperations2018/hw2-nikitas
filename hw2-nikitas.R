@@ -122,6 +122,7 @@ server <- function(input, output, session) {
     # Load and clean data
     if (is.null(data[1,1])){
       alert("There is no data available for your selected inputs. Please reset filters and select different inputs.")
+      # Now, if you wanna be fancy! You could have put in an updateInputs or autmatically click your button with shinyjs()
     } else {
       data <- data %>%
         mutate(DATE = as.Date(CREATED_ON),
